@@ -1,10 +1,22 @@
-import 'dart:io';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:file_selector/file_selector.dart';
 import 'package:screenshot/screenshot.dart';
+
+void save(Object bytes, String fileName) {
+  js.context.callMethod("saveAs", <Object>[
+    html.Blob(<Object>[bytes]),
+    fileName
+  ]);
+}
 
 void main() {
   runApp(const MyApp());
@@ -58,7 +70,7 @@ class _MyHomePageState extends State<MyHomePage> {
   ScreenshotController controller = ScreenshotController();
 
   String data = "";
-  String? embeddedImageUrl;
+  Uint8List? embeddedImageData;
   double imageSize = 80;
 
   @override
@@ -123,15 +135,16 @@ class _MyHomePageState extends State<MyHomePage> {
                           child: Text("Embed Image"),
                         ),
                         onPressed: () async {
-                          final typeGroup = XTypeGroup(label: 'image files', extensions: ['png', 'jpg', 'jpeg']);
-                          final result = await openFile(
-                            acceptedTypeGroups: [typeGroup],
-                            // confirmButtonText
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(
+                            dialogTitle: "Pick an image to embed",
+                            type: FileType.custom,
+                            allowedExtensions: ["png", "jpg", "jpeg"],
                           );
-
-                          setState(() {
-                            embeddedImageUrl = result!.path;
-                          });
+                          if (result != null) {
+                            setState(() {
+                              embeddedImageData = result.files.single.bytes;
+                            });
+                          }
                         },
                       ),
                       OutlinedButton(
@@ -143,7 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           child: Text("Reset"),
                         ),
                         onPressed: () => setState(() {
-                          embeddedImageUrl = null;
+                          embeddedImageData = null;
                         }),
                       ),
                     ],
@@ -159,14 +172,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 version: QrVersions.auto,
                 size: 320,
                 gapless: false,
-                embeddedImage: embeddedImageUrl != null ? FileImage(File(embeddedImageUrl!)) : null,
+                embeddedImage: embeddedImageData != null ? MemoryImage(embeddedImageData!) : null,
                 embeddedImageStyle: QrEmbeddedImageStyle(
                   size: Size(imageSize, imageSize),
                 ),
               ),
             ),
 
-            embeddedImageUrl != null 
+            embeddedImageData != null 
               ? Padding(
                   padding: const EdgeInsets.all(20),
                   child: Slider(
@@ -195,16 +208,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: Text("Export Image"),
                     ),
                     onPressed: () async {
-                      final typeGroup = XTypeGroup(label: 'png files', extensions: ['png']);
-                      final result = await getSavePath(
-                        acceptedTypeGroups: [typeGroup],
-                        confirmButtonText: "Set save location"
-                      );
+                      var img = await controller.captureAsUiImage() as ui.Image;
+                      var data = await img.toByteData(format: ui.ImageByteFormat.png);
 
-                      controller.captureAndSave(
-                        dirname(result!),
-                        fileName: basename(result),
-                      );
+                      save(data!, "my_qr_code.png");
                     },
                   ),
                 )
